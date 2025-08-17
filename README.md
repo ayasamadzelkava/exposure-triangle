@@ -4,7 +4,7 @@ An interactive 3D visualization of the **exposure triangle** (Shutter Speed, ISO
 This project helps photographers understand how different settings affect exposure and shooting scenarios.
 
 🌐 Live demo (via GitHub Pages):  
-https://YOURUSERNAME.github.io/exposure-triangle/
+https://ayasamadzelkava.github.io/exposure-triangle/
 
 ---
 
