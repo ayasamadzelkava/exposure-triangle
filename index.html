@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Exposure Triangle – 3D (Web)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Plotly CDN (no build tools needed) -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;margin:0;background:#0b1220;color:#e6e8f0}
+    header{padding:16px 20px;border-bottom:1px solid #1d2540}
+    .wrap{display:flex;gap:20px;padding:16px;flex-wrap:wrap}
+    #plot{flex:1 1 900px;min-width:320px;height:72vh;background:#0f172a;border:1px solid #1d2540;border-radius:12px}
+    .panel{flex:0 0 320px;background:#0f172a;border:1px solid #1d2540;border-radius:12px;padding:14px}
+    .group{margin-bottom:14px}
+    .group h3{margin:8px 0 8px 0;font-size:16px}
+    label{display:flex;align-items:center;gap:8px;margin:8px 0}
+    input[type="checkbox"]{width:18px;height:18px}
+    .hint{font-size:12px;color:#9aa3b2}
+    button{background:#1b2a4a;color:#e6e8f0;border:1px solid #22345c;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button:hover{background:#23345a}
+    .small{font-size:12px}
+    code{background:#101826;border:1px solid #1d2540;padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+<header>
+  <h2>Exposure Triangle – 3D (rotatable)</h2>
+</header>
+<div class="wrap">
+  <div id="plot"></div>
+  <div class="panel">
+    <div class="group">
+      <h3>Layers</h3>
+      <label><input type="checkbox" id="chkBrightness" checked> Show brightness cloud</label>
+      <label><input type="checkbox" id="chkScenarios" checked> Show scenarios & labels</label>
+    </div>
+    <div class="group">
+      <h3>Search</h3>
+      <input type="text" id="searchInput" placeholder="Search scenarios..." style="width:100%;padding:6px;border:1px solid #22345c;background:#101826;color:#e6e8f0;border-radius:6px;">
+    </div>
+    <div class="group">
+      <h3>View</h3>
+      <button id="btnReset">Reset camera</button>
+      <div class="hint small" style="margin-top:8px;">
+        Drag to rotate • Scroll to zoom • Right-drag to pan
+      </div>
+    </div>
+    <div class="group">
+      <h3>About</h3>
+      <div class="small">
+        Brightness color encodes relative exposure (stops): 
+        <code>log2(t · ISO / N²)</code>
+      </div>
+      <div class="small" style="margin-top:8px;">
+        <strong>Axes:</strong> X = Shutter Speed, Y = ISO, Z = Aperture (f-number)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ----- Data (same values you used in Python) -----
+  const shutterVals = [30,15,8,4,2,1, 1/2,1/4,1/8,1/15,1/30,1/60, 1/125,1/250,1/500,1/1000,1/2000,1/4000];
+  const isoVals     = [100,200,400,800,1600,3200,6400,12800];
+  const apertureVals= [1.4,2,2.8,4,5.6,8,11,16,22];
+
+const scenarios = [
+  ["Sunny action", 1/1000, 200, 5.6],
+  ["Indoor portrait", 1/60, 1600, 1.8],
+  ["Astro (Milky Way)", 15, 3200, 2.8],
+  ["Landscape", 1/125, 100, 11],
+  ["Indoor sports", 1/500, 3200, 2.8],
+  ["Concert", 1/250, 6400, 2.0],
+  ["Macro with flash", 1/250, 100, 16],
+  ["Long exposure", 1, 100, 16],
+  ["Golden hour", 1/250, 200, 2.0],
+  ["Snowy mountain daylight", 1/1000, 100, 11],
+  ["Night street handheld", 1/30, 3200, 2.0],
+  ["Fireworks", 4, 200, 8],
+  ["Bird in flight", 1/2000, 400, 5.6],
+  ["Waterfall silky effect", 1/2, 100, 16],
+  ["Studio portrait with strobes", 1/125, 100, 8],
+  ["Candlelit dinner", 1/40, 3200, 1.4],
+  ["Cityscape night tripod", 20, 200, 11],
+  ["Indoor group photo", 1/60, 800, 4.0],
+  ["Sunset silhouette", 1/500, 200, 8],
+  ["Sports stadium evening", 1/1000, 6400, 2.8],
+];
+
+
+  // Log2 helper
+  const log2 = x => Math.log(x) / Math.log(2);
+
+  // Pretty tick labels for shutter
+  function shutterLabel(s) {
+    if (s >= 1) return Number.isInteger(s) ? `${s}s` : `${s}s`;
+    const denom = Math.round(1 / s);
+    return `1/${denom}`;
+  }
+
+  // Axes tick positions (log2) and labels
+  const xTickVals = shutterVals.map(v => log2(v));
+  const xTickText = shutterVals.map(v => shutterLabel(v));
+  const yTickVals = isoVals.map(v => log2(v));
+  const yTickText = isoVals.map(v => String(v));
+  const zTickVals = apertureVals.map(v => log2(v));
+  const zTickText = apertureVals.map(v => `f/${v}`);
+
+  // ----- Brightness cloud (generate grid points) -----
+  const tRange  = [1/4000,1/2000,1/1000,1/500,1/250,1/125,1/60,1/30,1/15,1/8,1/4,1/2,1,2,4,8,15,30];
+  const isoRange= [100,200,400,800,1600,3200,6400,12800];
+  const fRange  = [1.4,2,2.8,4,5.6,8,11,16,22];
+
+  const X=[], Y=[], Z=[], C=[]; // log2 coords + color
+  for (const t of tRange) {
+    for (const iso of isoRange) {
+      for (const f of fRange) {
+        X.push(log2(t));
+        Y.push(log2(iso));
+        Z.push(log2(f));
+        const E = Math.log2((t * iso) / (f * f * 100.0)); // relative stops (100 is arbitrary ref)
+        C.push(E);
+      }
+    }
+  }
+  // normalize colors to [0,1]
+  const cMin = Math.min(...C), cMax = Math.max(...C);
+  const Cn = C.map(v => (v - cMin) / (cMax - cMin));
+
+  // ----- Build traces -----
+  const brightnessTrace = {
+    type: 'scatter3d',
+    mode: 'markers',
+    x: X, y: Y, z: Z,
+    marker: {
+      size: 2.4,
+      opacity: 0.75,
+      color: Cn,
+      colorscale: [
+        [0, '#0000ff'],    // Blue (too dark)
+        [0.5, '#00ff00'],  // Green (normal)
+        [1, '#ff0000']     // Red (too bright)
+      ],
+      colorbar: {
+        title: { text: 'Exposure level' },
+        tickvals: [0, 0.5, 1],
+        ticktext: ['Too dark', 'Normal', 'Too bright']
+      }
+    },
+    name: 'Brightness',
+    visible: true
+  };
+
+  const scenX = scenarios.map(s => log2(s[1]));
+  const scenY = scenarios.map(s => log2(s[2]));
+  const scenZ = scenarios.map(s => log2(s[3]));
+  const scenText = scenarios.map(s => s[0]);
+
+  function updateScenarioTrace(searchTerm = '') {
+    const colors = scenarios.map(s => {
+      const name = s[0].toLowerCase();
+      return searchTerm && name.includes(searchTerm.toLowerCase()) ? '#ffff00' : '#ff5252';
+    });
+
+    const scenarioTrace = {
+      type: 'scatter3d',
+      mode: 'markers+text',
+      x: scenX, y: scenY, z: scenZ,
+      text: scenText,
+      textposition: 'middle left',
+      marker: { 
+        size: 5, 
+        color: colors, 
+        line: { color: '#000', width: 1 } 
+      },
+      name: 'Scenarios',
+      visible: true
+    };
+    return scenarioTrace;
+  }
+
+  const scenarioTrace = updateScenarioTrace();
+
+  // ----- Layout -----
+  const layout = {
+    paper_bgcolor: '#0b1220',
+    plot_bgcolor: '#0b1220',
+    margin: { l: 0, r: 0, t: 30, b: 0 },
+    showlegend: false,
+    scene: {
+      bgcolor: '#0f172a',
+      xaxis: {
+        title: 'Shutter speed',
+        tickvals: xTickVals,
+        ticktext: xTickText,
+        gridcolor: '#23314f',
+        zerolinecolor: '#23314f',
+        color: '#cbd5e1',
+        range: [Math.min(...xTickVals), Math.max(...xTickVals)]
+      },
+      yaxis: {
+        title: 'ISO',
+        tickvals: yTickVals,
+        ticktext: yTickText,
+        gridcolor: '#23314f',
+        zerolinecolor: '#23314f',
+        color: '#cbd5e1',
+        range: [Math.min(...yTickVals), Math.max(...yTickVals)]
+      },
+      zaxis: {
+        title: 'Aperture (f-number)',
+        tickvals: zTickVals,
+        ticktext: zTickText,
+        gridcolor: '#23314f',
+        zerolinecolor: '#23314f',
+        color: '#cbd5e1',
+        range: [Math.min(...zTickVals), Math.max(...zTickVals)]
+      },
+      camera: { eye: {x: 1.6, y: 1.2, z: 1.2} }
+    }
+  };
+
+  const config = {
+    displaylogo: false,
+    responsive: true,
+    modeBarButtonsToRemove: ['toImage','resetScale2d'],
+    scrollZoom: true
+  };
+
+  Plotly.newPlot('plot', [brightnessTrace, scenarioTrace], layout, config);
+
+  // ----- UI handlers -----
+  const chkBrightness = document.getElementById('chkBrightness');
+  const chkScenarios = document.getElementById('chkScenarios');
+  const btnReset = document.getElementById('btnReset');
+  const searchInput = document.getElementById('searchInput');
+
+  chkBrightness.addEventListener('change', () => {
+    Plotly.restyle('plot', { visible: chkBrightness.checked }, [0]);
+  });
+  chkScenarios.addEventListener('change', () => {
+    Plotly.restyle('plot', { visible: chkScenarios.checked }, [1]);
+  });
+  
+  searchInput.addEventListener('input', () => {
+    const updatedTrace = updateScenarioTrace(searchInput.value);
+    Plotly.restyle('plot', {
+      'marker.color': [updatedTrace.marker.color]
+    }, [1]);
+  });
+  btnReset.addEventListener('click', () => {
+    Plotly.relayout('plot', {
+      'scene.camera': { eye: {x: 1.6, y: 1.2, z: 1.2} }
+    });
+  });
+})();
+</script>
+</body>
+</html>
