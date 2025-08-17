@@ -12,7 +12,6 @@ https://YOURUSERNAME.github.io/exposure-triangle/
 - **3D Interactive Plot** — Rotate, zoom, and explore the exposure triangle.
 - **Scenario Markers** — Real-world photo situations (e.g., *Sunny action*, *Indoor portrait*, *Astro*) are plotted for reference.
 - **Brightness Cloud** — Toggle on/off a visualization of exposure brightness across different combinations.
-- **Keyboard Toggles** — Press keys to switch between scenario view and brightness cloud view.
 - **Hover Labels** — Hover over points to see scenario names and settings.
 
 ---
